@@ -58,12 +58,12 @@ local function getPartyMembers()
 	for i = 1, 60 do
 		local member = UnitName("party" .. i)
 		if member == nil then break end
-		members[member] = string.lower(select(2, UnitClass(member)))
+		members[member] = string.lower(tostring(select(2, UnitClass(member))))
 	end
 	for i = 1, 60 do
 		local member = UnitName("raid" .. i)
 		if member == nil then break end
-		members[member] = string.lower(select(2, UnitClass(member)))
+		members[member] = string.lower(tostring(select(2, UnitClass(member))))
 	end
 	return members
 end
