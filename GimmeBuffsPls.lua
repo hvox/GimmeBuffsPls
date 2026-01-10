@@ -229,15 +229,18 @@ local function checkPartyBuffs()
 	end
 end
 
-function GimmeBuffsPls_CheckParty()
+function GimmeBuffsPls_CheckParty(includePlayer)
+	local player = UnitName("player")
 	local members = getPartyMembers()
 	local classes = getClasses(members)
 	local lines = {}
-	for player, _ in pairs(members) do
-		local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(player, classes)
-		local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
-		if next(missingBuffs) ~= nil then
-			table.insert(lines, player .. ": " .. concat(getKeys(missingBuffs), ", "))
+	for member, _ in pairs(members) do
+		if not includePlayer and player ~= member then
+			local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(member, classes)
+			local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
+			if next(missingBuffs) ~= nil then
+				table.insert(lines, member .. ": " .. concat(getKeys(missingBuffs), ", "))
+			end
 		end
 	end
 	return table.concat(lines, "\n")
