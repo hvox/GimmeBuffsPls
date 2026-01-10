@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: GimmeBuffsPls
+## Version: 0.0.1
+## Notes: /buff
+## Author: Me
+## RequiredDeps:
+## X-Curse-Project-ID: 0
+## SavedVariables:
+## SavedVariablesPerCharacter:
