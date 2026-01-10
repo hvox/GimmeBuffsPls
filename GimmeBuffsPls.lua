@@ -52,18 +52,28 @@ local function concat(words, separator, separatorLast)
 	return table.concat(words, separator, 1, #words - 1) .. separatorLast .. words[#words]
 end
 
+local isInRaid = true;
+
 local function getPartyMembers()
+	isInRaid = false;
 	local members = {}
 	members[UnitName("player")] = string.lower(select(2, UnitClass("player")))
 	for i = 1, 60 do
 		local member = UnitName("party" .. i)
 		if member == nil then break end
-		members[member] = string.lower(tostring(select(2, UnitClass(member))))
+		local _, memberClass = UnitClass(member)
+		if memberClass ~= nil then
+			members[member] = string.lower(memberClass)
+		end
 	end
 	for i = 1, 60 do
 		local member = UnitName("raid" .. i)
 		if member == nil then break end
-		members[member] = string.lower(tostring(select(2, UnitClass(member))))
+		local _, memberClass = UnitClass(member)
+		if memberClass ~= nil then
+			members[member] = string.lower(memberClass)
+		end
+		isInRaid = true
 	end
 	return members
 end
@@ -79,7 +89,7 @@ local function getClasses(members)
 		shaman = 0,
 		warlock = 0,
 		druid = 0,
-		deathknight = 0
+		deathknight = 0,
 	}
 	for _, class in pairs(members) do
 		classes[class] = classes[class] + 1
@@ -156,7 +166,8 @@ local function getMissingBuffs(player, classes)
 			"Blessing of Salvation", "Greater Blessing of Salvation", "Blessing of Sanctuary"
 		})
 	end
-	if IsInRaid ~= nil and IsInRaid() then
+	-- if IsInRaid ~= nil and IsInRaid() then
+	if isInRaid then
 		check(57399, { "Well Fed" })
 	end
 	return missingSelfBuffs, missingPartyBuffs
@@ -177,7 +188,7 @@ local function askForBuffs()
 		print("You miss no buffs from your teamates")
 	else
 		local message = "Gimme " .. concatBuffs(partyBuffs) .. " pls"
-		SendChatMessage(message)
+		SendChatMessage(message, isInRaid and "RAID" or "PARTY")
 	end
 	if next(soloBuffs) ~= nil then
 		print("P.S. You can buff yourself with " .. concatBuffs(soloBuffs))
@@ -204,7 +215,7 @@ local function askForBuffsForTeamates()
 		if next(missingBuffs) ~= nil then
 			everything_ok = false
 			local message = player .. " is missing " .. concatBuffs(missingBuffs)
-			SendChatMessage(message)
+			SendChatMessage(message, isInRaid and "RAID" or "PARTY")
 		end
 	end
 	if everything_ok then
