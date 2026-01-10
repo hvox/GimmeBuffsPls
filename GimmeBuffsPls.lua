@@ -12,29 +12,58 @@ local function trim(s)
 	return s:match("^%s*(.-)%s*$")
 end
 
-local function dump(o)
-	if type(o) == 'table' then
-		local s = '{ '
-		for k, v in pairs(o) do
-			if type(k) ~= 'number' then k = '"' .. k .. '"' end
-			s = s .. '[' .. k .. '] = ' .. dump(v) .. ','
-		end
-		return s .. '} '
-	else
-		return tostring(o)
+local function dump(object)
+	if type(object) ~= 'table' then
+		return tostring(object)
 	end
+	local s = '{ '
+	for k, v in pairs(object) do
+		if type(k) ~= 'number' then k = '"' .. k .. '"' end
+		s = s .. '[' .. k .. '] = ' .. dump(v) .. ','
+	end
+	return s .. '} '
+end
+
+local function mergeTables(table1, table2)
+	local union = {}
+	for k, v in pairs(table1) do
+		union[k] = v
+	end
+	for k, v in pairs(table2) do
+		union[k] = v
+	end
+	return union
+end
+
+local function getKeys(mapping)
+	local keys = {}
+	for key, _ in pairs(mapping) do
+		table.insert(keys, key)
+	end
+	return keys
+end
+
+local function concat(words, separator, separatorLast)
+	if separator == nil then separator = "" end
+	if separatorLast == nil then separatorLast = separator end
+	if #words < 2 then
+		return table.concat(words, separator)
+	end
+	return table.concat(words, separator, 1, #words - 1) .. separatorLast .. words[#words]
 end
 
 local function getPartyMembers()
 	local members = {}
-	local player = UnitName("player")
-	local partyType = IsInRaid() and "raid" or "party"
-	members[player] = string.lower(select(2, UnitClass("player")))
-	for i = 1, GetNumGroupMembers() do
-		local name = UnitName(partyType .. i)
-		if name ~= player then
-			members[name] = string.lower(select(2, UnitClass(partyType .. i)))
-		end
+	members[UnitName("player")] = string.lower(select(2, UnitClass("player")))
+	for i = 1, 60 do
+		local member = UnitName("party" .. i)
+		if member == nil then break end
+		members[member] = string.lower(select(2, UnitClass(member)))
+	end
+	for i = 1, 60 do
+		local member = UnitName("raid" .. i)
+		if member == nil then break end
+		members[member] = string.lower(select(2, UnitClass(member)))
 	end
 	return members
 end
@@ -58,11 +87,12 @@ local function getClasses(members)
 	return classes
 end
 
-local function getMissingBuffs(player, members)
+local function getMissingBuffs(player, classes)
+	if player == nil then player = UnitName("player") end
+	if classes == nil then classes = getClasses(getPartyMembers()) end
+	local class = string.lower(select(2, UnitClass(player)))
 	local missingSelfBuffs = {}
 	local missingPartyBuffs = {}
-	local classes = getClasses(members)
-	local class = string.lower(select(2, UnitClass(player)))
 
 	-- Party buffs
 	local function check(spell_id, spell_names)
@@ -81,9 +111,6 @@ local function getMissingBuffs(player, members)
 	end
 	if classes.druid > 0 then
 		check(48469, { "Mark of the Wild", "Gift of the Wild" })
-	end
-	if classes.warlock > 0 then
-		-- check(57567, { "Fel Intelligence" })
 	end
 	if classes.paladin >= 1 then
 		check(20217, { "Blessing of Kings", "Greater Blessing of Kings" })
@@ -115,184 +142,130 @@ local function getMissingBuffs(player, members)
 	end
 
 	if class == "mage" then
-		-- check(42995, { "Arcane Intellect", "Arcane Brilliance" })
 		check(42995, { "Arcane Intellect", "Arcane Brilliance", "Dalaran Brilliance" })
 		check(43046, { "Molten Armor", "Ice Armor" })
 	elseif class == "druid" then
 		check(48469, { "Mark of the Wild", "Gift of the Wild" })
 	elseif class == "priest" then
-		-- check(10938, { "Power Word: Fortitude", "Prayer of Fortitude" })
+		check(48169, { "Shadow Protectin", "Prayer of Shadow Protection" })
 		check(48161, { "Power Word: Fortitude", "Prayer of Fortitude" })
 		check(48073, { "Divine Spirit", "Prayer of Spirit" })
-		-- elseif class == "warlock" then
-		-- check(57567, { "Fel Intelligence" })
 	elseif class == "paladin" then
 		check(20217, {
 			"Blessing of Kings", "Greater Blessing of Kings", "Blessing of Wisdom", "Greater Blessing of Wisdom",
 			"Blessing of Salvation", "Greater Blessing of Salvation", "Blessing of Sanctuary"
 		})
 	end
+	if IsInRaid ~= nil and IsInRaid() then
+		check(57399, { "Well Fed" })
+	end
 	return missingSelfBuffs, missingPartyBuffs
 end
 
-local function reportMissingBuffsOnTeamates()
+local function concatBuffs(buffs)
+	local buffsList = {}
+	for _, spell_id in pairs(buffs) do
+		local link, _ = GetSpellLink(spell_id)
+		table.insert(buffsList, link)
+	end
+	return concat(buffsList, ", ", " and ")
+end
+
+local function askForBuffs()
+	local soloBuffs, partyBuffs = getMissingBuffs()
+	if next(partyBuffs) == nil then
+		print("You miss no buffs from your teamates")
+	else
+		local message = "Gimme " .. concatBuffs(partyBuffs) .. " pls"
+		SendChatMessage(message)
+	end
+	if next(soloBuffs) ~= nil then
+		print("P.S. You can buff yourself with " .. concatBuffs(soloBuffs))
+	end
+end
+
+local function checkMyBuffs()
+	local soloBuffs, partyBuffs = getMissingBuffs()
+	local missingBuffs = mergeTables(soloBuffs, partyBuffs)
+	if next(missingBuffs) == nil then
+		print("You miss no buffs. Everything is fine, hooray!")
+	else
+		print("Missing buffs: " .. concatBuffs(missingBuffs))
+	end
+end
+
+local function askForBuffsForTeamates()
 	local members = getPartyMembers()
-	local chatType = IsInRaid() and "RAID" or "PARTY"
+	local classes = getClasses(members)
+	local everything_ok = true
 	for player, _ in pairs(members) do
-		local missingBuffs, missingPartyBuffs = getMissingBuffs(player, members)
-		for key, value in pairs(missingPartyBuffs) do
-			missingBuffs[key] = value
-		end
+		local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(player, classes)
+		local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
 		if next(missingBuffs) ~= nil then
-			local message = player .. " is missing "
-			for _, spell_id in pairs(missingBuffs) do
-				message = message .. GetSpellLink(spell_id)
-			end
-			-- print(message)
-			SendChatMessage(message, chatType)
-			-- SendChatMessage(message)
+			everything_ok = false
+			local message = player .. " is missing " .. concatBuffs(missingBuffs)
+			SendChatMessage(message)
 		end
 	end
-end
-
-local function reportMissingBuffsOnTeamatesToMe()
-	local members = getPartyMembers()
-	local chatType = IsInRaid() and "RAID" or "PARTY"
-	for player, _ in pairs(members) do
-		local missingBuffs, missingPartyBuffs = getMissingBuffs(player, members)
-		for key, value in pairs(missingPartyBuffs) do
-			missingBuffs[key] = value
-		end
-		if next(missingBuffs) ~= nil then
-			local message = player .. " is missing "
-			for _, spell_id in pairs(missingBuffs) do
-				message = message .. GetSpellLink(spell_id)
-			end
-			print(message)
-			-- SendChatMessage(message, chatType)
-			-- SendChatMessage(message)
-		end
+	if everything_ok then
+		print("Everything is ok. Nobody is missing anything.")
 	end
 end
-
-local function AskForBuffs()
-	local members = getPartyMembers()
-	local _, missingPartyBuffs = getMissingBuffs(UnitName("player"), members)
-	if #missingPartyBuffs > 0 then
-		local message = "Gimme "
-		for _, spell_id in pairs(missingPartyBuffs) do
-			message = message .. GetSpellLink(spell_id)
-		end
-		message = message .. " pls"
-		SendChatMessage(message, chatType)
-	end
-end
-
-local function partyClasses()
-	local player_name = UnitName("player")
-	local partyType = IsInRaid() and "raid" or "party"
-	local classes = {
-		warrior = 0,
-		hunter = 0,
-		priest = 0,
-		mage = 0,
-		paladin = 0,
-		rogue = 0,
-		shaman = 0,
-		warlock = 0,
-		druid = 0,
-		deathknight = 0,
-	}
-	classes[string.lower(select(2, UnitClass("player")))] = 1
-	for i = 1, GetNumGroupMembers() do
-		if UnitName(partyType .. i) ~= player_name then
-			local class = string.lower(select(2, UnitClass(partyType .. i)))
-			classes[class] = classes[class] + 1
-		end
-	end
-	return classes
-end
-
-
-local function countPeople()
-	local paladins = 0
-	local mages = 0
-	local i = 1
-	local n = GetNumGroupMembers() + 1
-	while i <= n do
-		_, class = UnitClass("raid" .. i)
-		if class == nil then
-			_, class = UnitClass("party" .. i)
-		end
-		print("party" .. i, " = ", class, UnitName("party" .. i))
-		if class == "PALADIN" then
-			paladins = paladins + 1
-		end
-		if class == "MAGE" then
-			mages = mages + 1
-		end
-		i = i + 1
-	end
-	return mages, paladins
-end
-
-local expectedBuffs = {
-	mage = {
-		{ 42995, { "Arcane Intellect", "Arcane Brilliance", "Dalaran Brilliance" } },
-		{ 54646, { "Focus Magic" } },
-	},
-	priest = {
-		{ 21562, { "Prayer of Fortitude" } },
-	},
-	paladin = {
-		{ 20217, { "Blessing of Kings", "Greater Blessing of Kings" } }
-	},
-}
 
 local function checkPartyBuffs()
-	local missingBuffs = {}
-	local mages, paladins = countPeople()
-	print("mages=" .. mages .. ", paladins=" .. paladins)
-	if mages >= 1 and UnitBuff("player", "Arcane Intellect") == nil then
-		missingBuffs["Arcane Intellect"] = 42995
+	local members = getPartyMembers()
+	local classes = getClasses(members)
+	local everything_ok = true
+	for player, _ in pairs(members) do
+		local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(player, classes)
+		local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
+		if next(missingBuffs) ~= nil then
+			everything_ok = false
+			print(player .. " is missing " .. concatBuffs(missingBuffs))
+		end
 	end
-	if mages >= 2 and UnitBuff("player", "Focus Magic") == nil then
-		missingBuffs["Focus Magic"] = 54646
+	if everything_ok then
+		print("Everything is ok. Nobody is missing anything.")
 	end
-	if paladins >= 1 and UnitBuff("player", "Blessing of Kings") == nil and UnitBuff("player", "Greater Blessing of Kings") == nil then
-		missingBuffs["Blessing of Kings"] = 20217
-	end
-	if paladins >= 2 and UnitBuff("player", "Blessing of Wisdom") == nil then
-		missingBuffs["Blessing of Wisdom"] = 48936
-	end
-	return missingBuffs
 end
 
-
-local function getMissingPartyBuffsFormatted()
-	local text = ""
-	local buffs = checkPartyBuffs()
-	for name, _ in pairs(buffs) do
-		if text ~= "" then
-			text = text .. "\n"
+function GimmeBuffsPls_CheckParty()
+	local members = getPartyMembers()
+	local classes = getClasses(members)
+	local lines = {}
+	for player, _ in pairs(members) do
+		local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(player, classes)
+		local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
+		if next(missingBuffs) ~= nil then
+			table.insert(lines, player .. ": " .. concat(getKeys(missingBuffs), ", "))
 		end
-		text = text .. "Missing " .. name
 	end
-	return text
+	return table.concat(lines, "\n")
+end
+
+function GimmeBuffsPls_CheckMe()
+	local lines = {}
+	local missingBuffs = mergeTables(getMissingBuffs())
+	for buff, _ in pairs(missingBuffs) do
+		table.insert(lines, "Missing " .. buff)
+	end
+	return table.concat(lines, "\n")
 end
 
 SLASH_GIMMEBUFFSPLS1 = "/buff"
 -- SLASH_GIMMEBUFFSPLS2 = "/x"
 SlashCmdList["GIMMEBUFFSPLS"] = function(command)
-	print("Command: " .. command)
-	if command == "ask" then
-		AskForBuffs()
-	elseif command == "report" then
-		reportMissingBuffsOnTeamates()
-	elseif command == "team" then
-		reportMissingBuffsOnTeamatesToMe()
+	local original_message = SLASH_GIMMEBUFFSPLS1 .. " " .. command
+	print(original_message)
+	if command == "me" then
+		askForBuffs()
+	elseif command == "party" then
+		askForBuffsForTeamates()
+	elseif command == "check" then
+		checkPartyBuffs()
+	elseif command == "check me" then
+		checkMyBuffs()
 	else
-		print(getMissingPartyBuffsFormatted())
-		print(dump(partyClasses()))
+		print("ERROR: Unsupported command: " .. original_message)
 	end
 end
