@@ -152,6 +152,9 @@ local function getMissingBuffs(player, classes)
 	end
 
 	if class == "mage" then
+		if isInRaid then
+			check(53755, { "Flask of the Frost Wyrm" })
+		end
 		check(42995, { "Arcane Intellect", "Arcane Brilliance", "Dalaran Brilliance" })
 		check(43046, { "Molten Armor", "Ice Armor" })
 	elseif class == "druid" then
@@ -166,7 +169,6 @@ local function getMissingBuffs(player, classes)
 			"Blessing of Salvation", "Greater Blessing of Salvation", "Blessing of Sanctuary"
 		})
 	end
-	-- if IsInRaid ~= nil and IsInRaid() then
 	if isInRaid then
 		check(57399, { "Well Fed" })
 	end
