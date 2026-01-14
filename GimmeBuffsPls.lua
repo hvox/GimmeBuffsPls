@@ -6,7 +6,7 @@
 ## Author: Me
 ]]
 
-local AddonName = "GimmeBuffsPls"
+local addon_name = "GimmeBuffsPls"
 
 local function trim(s)
 	return s:match("^%s*(.-)%s*$")
@@ -24,7 +24,7 @@ local function dump(object)
 	return s .. '} '
 end
 
-local function mergeTables(table1, table2)
+local function merge_tables(table1, table2)
 	local union = {}
 	for k, v in pairs(table1) do
 		union[k] = v
@@ -35,7 +35,7 @@ local function mergeTables(table1, table2)
 	return union
 end
 
-local function getKeys(mapping)
+local function get_keys(mapping)
 	local keys = {}
 	for key, _ in pairs(mapping) do
 		table.insert(keys, key)
@@ -52,18 +52,18 @@ local function concat(words, separator, separatorLast)
 	return table.concat(words, separator, 1, #words - 1) .. separatorLast .. words[#words]
 end
 
-local isInRaid = true;
+local is_in_raid = true;
 
-local function getPartyMembers()
-	isInRaid = false;
+local function get_party_members()
+	is_in_raid = false;
 	local members = {}
 	members[UnitName("player")] = string.lower(select(2, UnitClass("player")))
 	for i = 1, 60 do
 		local member = UnitName("party" .. i)
 		if member == nil then break end
-		local _, memberClass = UnitClass(member)
-		if memberClass ~= nil then
-			members[member] = string.lower(memberClass)
+		local _, class = UnitClass(member)
+		if class ~= nil then
+			members[member] = string.lower(class)
 		end
 	end
 	for i = 1, 60 do
@@ -73,12 +73,12 @@ local function getPartyMembers()
 		if memberClass ~= nil then
 			members[member] = string.lower(memberClass)
 		end
-		isInRaid = true
+		is_in_raid = true
 	end
 	return members
 end
 
-local function getClasses(members)
+local function get_classes(members)
 	local classes = {
 		warrior = 0,
 		hunter = 0,
@@ -97,12 +97,12 @@ local function getClasses(members)
 	return classes
 end
 
-local function getMissingBuffs(player, classes)
+local function get_missing_buffs(player, classes)
 	if player == nil then player = UnitName("player") end
-	if classes == nil then classes = getClasses(getPartyMembers()) end
+	if classes == nil then classes = get_classes(get_party_members()) end
 	local class = string.lower(select(2, UnitClass(player)))
-	local missingSelfBuffs = {}
-	local missingPartyBuffs = {}
+	local missing_self_buffs = {}
+	local missing_party_buffs = {}
 
 	-- Party buffs
 	local function check(spell_id, spell_names)
@@ -111,7 +111,7 @@ local function getMissingBuffs(player, classes)
 				return true
 			end
 		end
-		missingPartyBuffs[spell_names[1]] = spell_id
+		missing_party_buffs[spell_names[1]] = spell_id
 		return false
 	end
 	if classes.priest > 0 then
@@ -146,13 +146,13 @@ local function getMissingBuffs(player, classes)
 				return false
 			end
 		end
-		missingPartyBuffs[spell_names[1]] = nil
-		missingSelfBuffs[spell_names[1]] = spell_id
+		missing_party_buffs[spell_names[1]] = nil
+		missing_self_buffs[spell_names[1]] = spell_id
 		return false
 	end
 
 	if class == "mage" then
-		if isInRaid then
+		if is_in_raid then
 			check(53755, { "Flask of the Frost Wyrm" })
 		end
 		check(42995, { "Arcane Intellect", "Arcane Brilliance", "Dalaran Brilliance" })
@@ -169,55 +169,55 @@ local function getMissingBuffs(player, classes)
 			"Blessing of Salvation", "Greater Blessing of Salvation", "Blessing of Sanctuary"
 		})
 	end
-	if isInRaid then
+	if is_in_raid then
 		check(57399, { "Well Fed" })
 	end
-	return missingSelfBuffs, missingPartyBuffs
+	return missing_self_buffs, missing_party_buffs
 end
 
-local function concatBuffs(buffs)
-	local buffsList = {}
+local function concat_bufflinks(buffs)
+	local links = {}
 	for _, spell_id in pairs(buffs) do
 		local link, _ = GetSpellLink(spell_id)
-		table.insert(buffsList, link)
+		table.insert(links, link)
 	end
-	return concat(buffsList, ", ", " and ")
+	return concat(links, ", ", " and ")
 end
 
-local function askForBuffs()
-	local soloBuffs, partyBuffs = getMissingBuffs()
-	if next(partyBuffs) == nil then
+local function ask_for_buffs()
+	local self_buffs, party_buffs = get_missing_buffs()
+	if next(party_buffs) == nil then
 		print("You miss no buffs from your teamates")
 	else
-		local message = "Gimme " .. concatBuffs(partyBuffs) .. " pls"
-		SendChatMessage(message, isInRaid and "RAID" or "PARTY")
+		local message = "Gimme " .. concat_bufflinks(party_buffs) .. " pls"
+		SendChatMessage(message, is_in_raid and "RAID" or "PARTY")
 	end
-	if next(soloBuffs) ~= nil then
-		print("P.S. You can buff yourself with " .. concatBuffs(soloBuffs))
+	if next(self_buffs) ~= nil then
+		print("You can buff yourself with " .. concat_bufflinks(self_buffs))
 	end
 end
 
-local function checkMyBuffs()
-	local soloBuffs, partyBuffs = getMissingBuffs()
-	local missingBuffs = mergeTables(soloBuffs, partyBuffs)
-	if next(missingBuffs) == nil then
+local function check_self_buffs()
+	local self_buffs, party_buffs = get_missing_buffs()
+	local missing_buffs = merge_tables(self_buffs, party_buffs)
+	if next(missing_buffs) == nil then
 		print("You miss no buffs. Everything is fine, hooray!")
 	else
-		print("Missing buffs: " .. concatBuffs(missingBuffs))
+		print("Missing buffs: " .. concat_bufflinks(missing_buffs))
 	end
 end
 
-local function askForBuffsForTeamates()
-	local members = getPartyMembers()
-	local classes = getClasses(members)
+local function ask_for_buffs_for_party()
+	local members = get_party_members()
+	local classes = get_classes(members)
 	local everything_ok = true
 	for player, _ in pairs(members) do
-		local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(player, classes)
-		local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
-		if next(missingBuffs) ~= nil then
+		local missing_self_buffs, missing_party_buffs = get_missing_buffs(player, classes)
+		local missing_buffs = merge_tables(missing_self_buffs, missing_party_buffs)
+		if next(missing_buffs) ~= nil then
 			everything_ok = false
-			local message = player .. " is missing " .. concatBuffs(missingBuffs)
-			SendChatMessage(message, isInRaid and "RAID" or "PARTY")
+			local message = player .. " is missing " .. concat_bufflinks(missing_buffs)
+			SendChatMessage(message, is_in_raid and "RAID" or "PARTY")
 		end
 	end
 	if everything_ok then
@@ -225,16 +225,16 @@ local function askForBuffsForTeamates()
 	end
 end
 
-local function checkPartyBuffs()
-	local members = getPartyMembers()
-	local classes = getClasses(members)
+local function check_party_buffs()
+	local members = get_party_members()
+	local classes = get_classes(members)
 	local everything_ok = true
 	for player, _ in pairs(members) do
-		local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(player, classes)
-		local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
-		if next(missingBuffs) ~= nil then
+		local missing_self_buffs, missing_party_buffs = get_missing_buffs(player, classes)
+		local missing_buffs = merge_tables(missing_self_buffs, missing_party_buffs)
+		if next(missing_buffs) ~= nil then
 			everything_ok = false
-			print(player .. " is missing " .. concatBuffs(missingBuffs))
+			print(player .. " is missing " .. concat_bufflinks(missing_buffs))
 		end
 	end
 	if everything_ok then
@@ -242,30 +242,38 @@ local function checkPartyBuffs()
 	end
 end
 
-function GimmeBuffsPls_CheckParty(includePlayer)
+function GimmeBuffsPlsAddonCheckParty(include_player)
 	local player = UnitName("player")
-	local members = getPartyMembers()
-	local classes = getClasses(members)
+	local members = get_party_members()
+	local classes = get_classes(members)
 	local lines = {}
 	for member, _ in pairs(members) do
-		if not includePlayer and player ~= member then
-			local missingSelfBuffs, missingPartyBuffs = getMissingBuffs(member, classes)
-			local missingBuffs = mergeTables(missingSelfBuffs, missingPartyBuffs)
+		if not include_player and player ~= member then
+			local missing_self_buffs, missing_party_buffs = get_missing_buffs(member, classes)
+			local missingBuffs = merge_tables(missing_self_buffs, missing_party_buffs)
 			if next(missingBuffs) ~= nil then
-				table.insert(lines, member .. ": " .. concat(getKeys(missingBuffs), ", "))
+				table.insert(lines, member .. ": " .. concat(get_keys(missingBuffs), ", "))
 			end
 		end
 	end
 	return table.concat(lines, "\n")
 end
 
-function GimmeBuffsPls_CheckMe()
+function GimmeBuffsPlsAddonCheckPlayer()
 	local lines = {}
-	local missingBuffs = mergeTables(getMissingBuffs())
+	local missingBuffs = merge_tables(get_missing_buffs())
 	for buff, _ in pairs(missingBuffs) do
 		table.insert(lines, "Missing " .. buff)
 	end
 	return table.concat(lines, "\n")
+end
+
+function GimmeBuffsPls_CheckParty(include_player)
+	return GimmeBuffsPlsAddonCheckParty(include_player)
+end
+
+function GimmeBuffsPls_CheckMe()
+	return GimmeBuffsPlsAddonCheckPlayer()
 end
 
 SLASH_GIMMEBUFFSPLS1 = "/buff"
@@ -274,13 +282,13 @@ SlashCmdList["GIMMEBUFFSPLS"] = function(command)
 	local original_message = SLASH_GIMMEBUFFSPLS1 .. " " .. command
 	print(original_message)
 	if command == "me" then
-		askForBuffs()
+		ask_for_buffs()
 	elseif command == "party" then
-		askForBuffsForTeamates()
+		ask_for_buffs_for_party()
 	elseif command == "check" then
-		checkPartyBuffs()
+		check_party_buffs()
 	elseif command == "check me" then
-		checkMyBuffs()
+		check_self_buffs()
 	else
 		print("ERROR: Unsupported command: " .. original_message)
 	end
